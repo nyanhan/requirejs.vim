@@ -133,12 +133,12 @@ fun! s:RJS_GetConfig()
     " find the config file
     if empty(g:require_js_config_file) || empty(g:require_js_base_url) || empty(g:require_js_paths)
         let js_dir = getcwd()
-        let requirejs_configs = split(system("grep -lR 'config.js' " . js_dir . "/* | grep -v .md", '\n'))
+        let requirejs_configs = split(system("grep -lR 'require.config' " . js_dir . "/* | grep -v .md", '\n'))
         " TODO determine which file is actuall the right one
         let g:require_js_config_file = requirejs_configs[0]
 
         let contents = system("cat " . g:require_js_config_file)
-        let config = matchstr(contents, 'requirejs.config\_.\{-}});')
+        let config = matchstr(contents, 'require.config\_.\{-}});')
 
         if empty(config)
             throw "Config not found"
