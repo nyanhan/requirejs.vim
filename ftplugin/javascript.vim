@@ -41,13 +41,8 @@ fun! RJS_OpenFile(file)
 
     if !empty(file)
         call s:RJS_GetConfig()
-
-        if match(file, '^text!') == -1
-            call s:RJS_OpenJSFile(file)
-        else
-            let file = substitute(file, '^text!', '', '')
-            call s:RJS_OpenTextFile(file)
-        endif
+        let file = substitute(file, '^\w*!', "", "")
+        call s:RJS_OpenJSFile(file)
     endif
 endf
 
@@ -133,6 +128,7 @@ fun! s:RJS_TrimString(str)
 endf
 
 fun! s:RJS_GetConfig() 
+    " TODO path and trim read failt, but not good at this regex
     " find the config file
     if empty(g:require_js_config_file) || empty(g:require_js_base_url) || empty(g:require_js_paths)
         "let js_dir = expand('%:p:h')
@@ -179,7 +175,7 @@ fun! s:RJS_OpenJSFile(file)
     endfor
 
     " append prepend baseUrl and append .js to the file
-    if match(js_file, '\.js$') == -1 && match(js_file, '\.hbs$') == -1
+    if match(js_file, '\.js$') == -1 && match(js_file, '\.hbs$') == -1 && match(js_file, '\.html$') == -1 && match(js_file, '\.htm$') == -1
         let js_file = js_file . '.js'
     endif
 
@@ -192,31 +188,6 @@ fun! s:RJS_OpenJSFile(file)
         echom "No such file: " . js_file
     endif
 endf
-
-
-
-fun! s:RJS_OpenTextFile(file) 
-    let text_file = a:file
-
-    let path_keys = keys(g:require_js_paths)
-    let pattern = '^' . substitute(g:require_js_base_url, '[^/]\+', "[^/]\\\\+", 'g') . '/'
-    for k in path_keys 
-        if match(text_file, '^' . k) != -1
-            let text_file = substitute(g:require_js_paths[k] . substitute(text_file, '^' . k, '', ''), '/$', '', '')
-        endif
-    endfor
-
-    let text_file = substitute(text_file, pattern, '', '')
-
-    " check if file is readable and try to open it in new tab
-    if (filereadable(text_file))
-        exec ':e ' . text_file
-    else
-        echom "No such file: " . text_file
-    endif
-endf
-
-
 
 
 nmap <silent> gt :call RJS_OpenFile('')<CR> 
