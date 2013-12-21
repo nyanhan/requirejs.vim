@@ -23,8 +23,7 @@ endif
 fun! RJS_OpenFile(file)
     let map = {}
     let file = ''
-    " file conatains require or define
-    
+
     " get the urlstring under the curser
     if empty(a:file)
         let file = s:RJS_GetFileNameFromString()
@@ -122,30 +121,38 @@ fun! s:RJS_Trim(arr)
     let i = 0
     let arr = a:arr
     for entry in arr
-        let arr[i] = substitute(substitute(entry, '^\_\s*[''"]*', '', ''), '[''"]*\_\s*$', '', '')
+        let arr[i] = s:RJS_TrimString(entry)
         let i += 1
     endfor
     return arr
 endf
 
+fun! s:RJS_TrimString(str)
+    let str = a:str
+    return substitute(substitute(str, '^\_\s*[''"]*', '', ''), '[''"]*\_\s*$', '', '')
+endf
 
 fun! s:RJS_GetConfig() 
     " find the config file
     if empty(g:require_js_config_file) || empty(g:require_js_base_url) || empty(g:require_js_paths)
-        let js_dir = getcwd()
-        let requirejs_configs = split(system("grep -lR 'require.config' " . js_dir . "/* | grep -v .md", '\n'))
-        " TODO determine which file is actuall the right one
-        let g:require_js_config_file = requirejs_configs[0]
+        "let js_dir = expand('%:p:h')
 
-        let contents = system("cat " . g:require_js_config_file)
-        let config = matchstr(contents, 'require.config\_.\{-}});')
+        let g:require_js_config_file = findfile("config.js", ".;")
 
-        if empty(config)
-            throw "Config not found"
+        if empty(g:require_js_config_file)
+            throw "requirejs config.js file not found ..."
+        endif
+        
+        let g:require_js_config_file = s:RJS_TrimString(g:require_js_config_file)
+        let config = system("cat " . g:require_js_config_file)
+        let g:require_js_base_url = matchstr(config, 'baseUrl[''"]\?\s*:\s*\([''"]\)\zs.\{-}\ze\1')
+
+        if empty(g:require_js_base_url)
+            let g:require_js_base_url = fnamemodify(g:require_js_config_file, ":h")
         endif
 
-        let g:require_js_base_url = matchstr(config, 'baseUrl[''"]\?\s*:\s*\([''"]\)\zs.\{-}\ze\1')
         let paths_str = split(matchstr(config, 'paths[''"]\?\s*:\s*{\n\zs\_.\{-}\ze}'), '\n')
+
         " read and use the paths
         let g:require_js_paths = {}
         for i in paths_str
@@ -155,6 +162,7 @@ fun! s:RJS_GetConfig()
                 let g:require_js_paths[key] = val
             endif
         endfor
+        echo g:require_js_paths
     endif
 endf
 
@@ -171,13 +179,15 @@ fun! s:RJS_OpenJSFile(file)
     endfor
 
     " append prepend baseUrl and append .js to the file
-    if match(js_file, '.js$') == -1
-        let js_file = g:require_js_base_url . '/' . js_file . '.js'
+    if match(js_file, '\.js$') == -1 && match(js_file, '\.hbs$') == -1
+        let js_file = js_file . '.js'
     endif
+
+    let js_file = g:require_js_base_url . '/' . js_file
 
     " check if file is readable and try to open it in new tab
     if (filereadable(js_file))
-        exec ':tabe ' . js_file
+        exec ':e ' . js_file
     else
         echom "No such file: " . js_file
     endif
@@ -200,7 +210,7 @@ fun! s:RJS_OpenTextFile(file)
 
     " check if file is readable and try to open it in new tab
     if (filereadable(text_file))
-        exec ':tabe ' . text_file
+        exec ':e ' . text_file
     else
         echom "No such file: " . text_file
     endif
