@@ -30,7 +30,7 @@ fun! RJS_OpenFile(file)
         if empty(file)
             let file = s:RJS_GetFileNameFromVariable(map)
             if empty(file)
-                echom "No matching file found"
+                echom "No matching file found ..."
             endif
         endif
     else
@@ -127,11 +127,26 @@ fun! s:RJS_TrimString(str)
     return substitute(substitute(str, '^\_\s*[''"]*', '', ''), '[''"]*\_\s*$', '', '')
 endf
 
+fun! s:RJS_ReadHash(str)
+    let str = a:str
+
+    if empty(str)
+        return ["", ""]
+    endif
+
+    " remove ending ,
+    let str = split(str, ",")[0]
+    " spliting with : and remove \"
+    let a = split(str, ":")
+    let key = s:RJS_TrimString(a[0])
+    let val = s:RJS_TrimString(join(a[1:], ":"))
+
+    return [key, val]
+endf
+
 fun! s:RJS_GetConfig() 
-    " TODO path and trim read failt, but not good at this regex
     " find the config file
     if empty(g:require_js_config_file) || empty(g:require_js_base_url) || empty(g:require_js_paths)
-        "let js_dir = expand('%:p:h')
 
         let g:require_js_config_file = findfile("config.js", ".;")
 
@@ -152,27 +167,30 @@ fun! s:RJS_GetConfig()
         " read and use the paths
         let g:require_js_paths = {}
         for i in paths_str
-            let key = matchstr(i, '\s*\([''"]\?\)\zs.\{-}\ze\1\s')
-            let val = matchstr(i, '\s*\([''"]\?\)' . key . '\1\s*:\s*\([''"]\)\zs.\{-}\ze\2')
-            if !empty(key)
-                let g:require_js_paths[key] = val
+            let res = s:RJS_ReadHash(i)
+
+            if !empty(res[0]) && !empty(res[1])
+                let g:require_js_paths[res[0]] = res[1] 
             endif
         endfor
-        echo g:require_js_paths
     endif
 endf
 
 
 
 fun! s:RJS_OpenJSFile(file) 
-    let js_file = a:file
+    " add a / to know the name end
+    let js_file = a:file . "/"
     let path_keys = keys(g:require_js_paths)
 
     for k in path_keys 
-        if match(js_file, '^' . k) != -1
-            let js_file = substitute(g:require_js_paths[k] . '/' . substitute(js_file, '^' . k, '', ''), '/$', '', '')
+        if match(js_file, '^' . k . "/") != -1
+            let js_file = substitute(js_file, k, g:require_js_paths[k], "")
         endif
     endfor
+    
+    " remove the added \/
+    let js_file = substitute(js_file, '\/$', "", "")
 
     " append prepend baseUrl and append .js to the file
     if match(js_file, '\.js$') == -1 && match(js_file, '\.hbs$') == -1 && match(js_file, '\.html$') == -1 && match(js_file, '\.htm$') == -1
