@@ -172,7 +172,9 @@ endf
 fun! s:RJS_GetConfig() 
     " find the config file each time, not on startup
     " find parents dir config.js
-    let g:require_js_config_file = findfile("config.js", ".;")
+    let project = finddir(".git", ".;")
+    let project = fnamemodify(project, ":h")
+    let g:require_js_config_file = findfile("config.js", project . "/**")
 
     " must have config.js
     if empty(g:require_js_config_file)
@@ -183,12 +185,13 @@ fun! s:RJS_GetConfig()
 
     " find baseUrl in config.js, not tested
     let config = system("cat " . g:require_js_config_file)
-    let g:require_js_base_url = matchstr(config, 'baseUrl[''"]\?\s*:\s*\([''"]\)\zs.\{-}\ze\1')
+    let relative = matchstr(config, 'baseUrl[''"]\?\s*:\s*\([''"]\)\zs.\{-}\ze\1')
 
-    " if baseUrl is undefined, set it the dirname of config.js
-    if empty(g:require_js_base_url)
-        let g:require_js_base_url = fnamemodify(g:require_js_config_file, ":h")
+    if empty(relative)
+        let relative = "."
     endif
+
+    let g:require_js_base_url = fnamemodify(g:require_js_config_file, ":h") . "/" . relative
 
     " read the paths to a hash
     let paths_str = split(matchstr(config, 'paths[''"]\?\s*:\s*{\n\zs\_.\{-}\ze}'), '\n')
