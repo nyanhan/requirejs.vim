@@ -20,27 +20,22 @@ endif
 
 
 
-fun! RJS_OpenFile(file)
-    let map = {}
-    let file = ''
+fun! RJS_OpenFile()
 
     " get the urlstring under the curser
-    if empty(a:file)
-        let file = s:RJS_GetFileNameFromString()
-        if empty(file)
-            let file = s:RJS_GetFileNameFromVariable(map)
-            if empty(file)
-                echom "No matching file found ..."
-            endif
-        endif
+    let file = s:RJS_GetFileNameFromString()
+
+    "if empty(file)
+        "let file = s:RJS_GetFileNameFromVariable()
+    "endif
+
+    if empty(file)
+        echom "No matching file found ..."
     else
-        let file = a:file
-    endif
+        echom "Opening file:  " . file
 
-    echo "Opening file:  " . file
-
-    if !empty(file)
         call s:RJS_GetConfig()
+        " replace text! or async!
         let file = substitute(file, '^\w*!', "", "")
         call s:RJS_OpenJSFile(file)
     endif
@@ -49,36 +44,46 @@ endf
 
 fun! s:RJS_GetFileNameFromString()
     try
+        " backup reg a, for refine it later
         let a_save = @a
+
+        " copy string in \' to reg a
         let @a = ''
         normal! "ayi'
+
         if !empty(@a)
             return @a
-        else
-            normal! "ayi"
-            if !empty(@a)
-                return @a
-            else 
-                return ''
-            endif
+        endif
+
+        " copy string in \" to reg a
+        normal! "ayi"
+
+        if !empty(@a)
+            return @a
+        else 
+            return ''
         endif
     finally
+        " recover reg a
         let @a = a_save
     endtry
 endf
 
-fun! s:RJS_GetFileNameFromVariable(map)
+fun! s:RJS_GetFileNameFromVariable()
     try
+        " backup reg a, for refine it later
         let a_save = @a
+
+        " copy word use yiw to reg a
         let @a = ''
         normal! "ayiw
+
         if !empty(@a)
             let var = @a
-            if empty(a:map) 
-                call s:RJS_LoadRequireList(a:map)
-            endif
-            if has_key(a:map, var) 
-                return a:map[var]
+            let map = s:RJS_LoadRequireList()
+
+            if has_key(map, var) 
+                return map[var]
             else
                 echom "No file for " . var
             endif
@@ -90,23 +95,40 @@ fun! s:RJS_GetFileNameFromVariable(map)
     endtry
 endf
 
-fun! s:RJS_LoadRequireList(map) 
+fun! s:RJS_LoadRequireList() 
     try
+        " copy all content to reg a
         let a_save = @a
+        " save cursor position
+        let save_cursor = getpos(".")
         normal! ggVG"ay
+        " reset cursor position
+        call setpos('.', save_cursor)
+
+        let map = {}
         let file_contents = @a
+        " TODO match content in define, like: define([], function() {}); but if
+        " module has name may error 
         let define = matchstr(file_contents, 'define\s*(\s*\[\_.\{-}\]\s*,\s*function\s*(\_.\{-})')
+        " get paths in define
         let files = s:RJS_Trim(split(matchstr(define, 'define\s*(\s*\[\zs\_.\{-}\ze\]'), ','))
+        " get variable in define
         let vars = s:RJS_Trim(split(matchstr(define, 'function\s*(\zs\_.\{-}\ze)'), ','))
         let i = 0
 
         for file in files
             let var_name = get(vars, i)
+
             if  !empty(var_name)
-                let a:map[var_name] = file
+                let map[var_name] = file
             endif
+
             let i += 1
         endfor
+
+        return map
+    catch
+        return {}
     finally
         let @a = a_save
     endtry
@@ -122,10 +144,12 @@ fun! s:RJS_Trim(arr)
     return arr
 endf
 
+
 fun! s:RJS_TrimString(str)
     let str = a:str
     return substitute(substitute(str, '^\_\s*[''"]*', '', ''), '[''"]*\_\s*$', '', '')
 endf
+
 
 fun! s:RJS_ReadHash(str)
     let str = a:str
@@ -144,36 +168,39 @@ fun! s:RJS_ReadHash(str)
     return [key, val]
 endf
 
+
 fun! s:RJS_GetConfig() 
-    " find the config file
-    if empty(g:require_js_config_file) || empty(g:require_js_base_url) || empty(g:require_js_paths)
+    " find the config file each time, not on startup
+    " find parents dir config.js
+    let g:require_js_config_file = findfile("config.js", ".;")
 
-        let g:require_js_config_file = findfile("config.js", ".;")
-
-        if empty(g:require_js_config_file)
-            throw "requirejs config.js file not found ..."
-        endif
-        
-        let g:require_js_config_file = s:RJS_TrimString(g:require_js_config_file)
-        let config = system("cat " . g:require_js_config_file)
-        let g:require_js_base_url = matchstr(config, 'baseUrl[''"]\?\s*:\s*\([''"]\)\zs.\{-}\ze\1')
-
-        if empty(g:require_js_base_url)
-            let g:require_js_base_url = fnamemodify(g:require_js_config_file, ":h")
-        endif
-
-        let paths_str = split(matchstr(config, 'paths[''"]\?\s*:\s*{\n\zs\_.\{-}\ze}'), '\n')
-
-        " read and use the paths
-        let g:require_js_paths = {}
-        for i in paths_str
-            let res = s:RJS_ReadHash(i)
-
-            if !empty(res[0]) && !empty(res[1])
-                let g:require_js_paths[res[0]] = res[1] 
-            endif
-        endfor
+    " must have config.js
+    if empty(g:require_js_config_file)
+        throw "requirejs config.js file not found ..."
     endif
+
+    let g:require_js_config_file = s:RJS_TrimString(g:require_js_config_file)
+
+    " find baseUrl in config.js, not tested
+    let config = system("cat " . g:require_js_config_file)
+    let g:require_js_base_url = matchstr(config, 'baseUrl[''"]\?\s*:\s*\([''"]\)\zs.\{-}\ze\1')
+
+    " if baseUrl is undefined, set it the dirname of config.js
+    if empty(g:require_js_base_url)
+        let g:require_js_base_url = fnamemodify(g:require_js_config_file, ":h")
+    endif
+
+    " read the paths to a hash
+    let paths_str = split(matchstr(config, 'paths[''"]\?\s*:\s*{\n\zs\_.\{-}\ze}'), '\n')
+    let g:require_js_paths = {}
+
+    for i in paths_str
+        let res = s:RJS_ReadHash(i)
+
+        if !empty(res[0]) && !empty(res[1])
+            let g:require_js_paths[res[0]] = res[1] 
+        endif
+    endfor
 endf
 
 
@@ -188,7 +215,7 @@ fun! s:RJS_OpenJSFile(file)
             let js_file = substitute(js_file, k, g:require_js_paths[k], "")
         endif
     endfor
-    
+
     " remove the added \/
     let js_file = substitute(js_file, '\/$', "", "")
 
@@ -199,7 +226,7 @@ fun! s:RJS_OpenJSFile(file)
 
     let js_file = g:require_js_base_url . '/' . js_file
 
-    " check if file is readable and try to open it in new tab
+    " check if file is readable and try to open it
     if (filereadable(js_file))
         exec ':e ' . js_file
     else
@@ -208,4 +235,4 @@ fun! s:RJS_OpenJSFile(file)
 endf
 
 
-nmap <silent> gt :call RJS_OpenFile('')<CR> 
+nmap <silent> gt :call RJS_OpenFile()<CR> 
