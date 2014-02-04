@@ -1,24 +1,11 @@
-if exists('rjs_loaded')
-    finish
-endif
-let rjs_loaded = 1
+if exists('g:loaded_require_js')
+	fini
+en
 
-
-if !exists("g:require_js_config_file")
-    let g:require_js_config_file = ''
-endif
-
-if !exists("g:require_base_url")
-    let g:require_js_base_url = ''
-endif
-
-if !exists("g:require_js_paths")
-    let g:require_js_paths = {}
-endif
-
-
-
-
+let g:loaded_require_js = 1
+let b:require_js_config_file = ''
+let b:require_js_base_url = ''
+let b:require_js_paths = {}
 
 fun! RJS_OpenFile()
 
@@ -173,35 +160,47 @@ fun! s:RJS_GetConfig()
     " find the config file each time, not on startup
     " find parents dir config.js
     let project = finddir(".git", ".;")
+
+    " must git project
+    if empty(project)
+        throw "No .git dir find in this project ..."
+    endif
+
     let project = fnamemodify(project, ":h")
-    let g:require_js_config_file = findfile("config.js", project . "/**")
+    let cwd = getcwd()
+    let config = ""
+
+    while !config && cwd != project
+        let config = findfile("config.js", cwd . "/**")
+        let cwd = fnamemodify(cwd, ":h")
+    endwhile
 
     " must have config.js
-    if empty(g:require_js_config_file)
+    if empty(config)
         throw "requirejs config.js file not found ..."
     endif
 
-    let g:require_js_config_file = s:RJS_TrimString(g:require_js_config_file)
+    let b:require_js_config_file = s:RJS_TrimString(config)
 
     " find baseUrl in config.js, not tested
-    let config = system("cat " . g:require_js_config_file)
+    let config = system("cat " . b:require_js_config_file)
     let relative = matchstr(config, 'baseUrl[''"]\?\s*:\s*\([''"]\)\zs.\{-}\ze\1')
 
     if empty(relative)
         let relative = "."
     endif
 
-    let g:require_js_base_url = fnamemodify(g:require_js_config_file, ":h") . "/" . relative
+    let b:require_js_base_url = fnamemodify(b:require_js_config_file, ":h") . "/" . relative
 
     " read the paths to a hash
     let paths_str = split(matchstr(config, 'paths[''"]\?\s*:\s*{\n\zs\_.\{-}\ze}'), '\n')
-    let g:require_js_paths = {}
+    let b:require_js_paths = {}
 
     for i in paths_str
         let res = s:RJS_ReadHash(i)
 
         if !empty(res[0]) && !empty(res[1])
-            let g:require_js_paths[res[0]] = res[1] 
+            let b:require_js_paths[res[0]] = res[1] 
         endif
     endfor
 endf
@@ -211,11 +210,11 @@ endf
 fun! s:RJS_OpenJSFile(file) 
     " add a / to know the name end
     let js_file = a:file . "/"
-    let path_keys = keys(g:require_js_paths)
+    let path_keys = keys(b:require_js_paths)
 
     for k in path_keys 
         if match(js_file, '^' . k . "/") != -1
-            let js_file = substitute(js_file, k, g:require_js_paths[k], "")
+            let js_file = substitute(js_file, k, b:require_js_paths[k], "")
         endif
     endfor
 
@@ -227,7 +226,7 @@ fun! s:RJS_OpenJSFile(file)
         let js_file = js_file . '.js'
     endif
 
-    let js_file = g:require_js_base_url . '/' . js_file
+    let js_file = b:require_js_base_url . '/' . js_file
 
     " check if file is readable and try to open it
     if (filereadable(js_file))
