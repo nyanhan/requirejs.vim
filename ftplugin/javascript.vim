@@ -170,9 +170,23 @@ fun! s:RJS_GetConfig()
     let cwd = getcwd()
     let config = ""
 
-    while !config && cwd != project
+    while !config
+
+        let lt = 0
+
+        " last compare to root folder
+        if cwd == project
+            let lt = 1
+        endif
+
         let config = findfile("config.js", cwd . "/**")
         let cwd = fnamemodify(cwd, ":h")
+
+        " if last time
+        if lt == 1
+            break
+        endif
+
     endwhile
 
     " must have config.js
